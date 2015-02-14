@@ -1,25 +1,225 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Reproducible Research Peer Assignment 1"
+author: "student: Huertas"
+date: "Thursday, February 12, 2015"
+output: html_document
 ---
 
+## Introduction
+This entire assignment consist to make a report with a **single R markdown** document that can be processed by **knitr** and be transformed into an HTML file. It contains text explanaining the report, the code and the output of statistical processes. This is the basis of **Reproducible Research**. 
 
-## Loading and preprocessing the data
+###Data
+It is now possible to collect a large amount of data about personal
+movement using activity monitoring devices such as a
+[Fitbit](http://www.fitbit.com), [Nike
+Fuelband](http://www.nike.com/us/en_us/c/nikeplus-fuelband), or
+[Jawbone Up](https://jawbone.com/up). These type of devices are part of
+the "quantified self" movement -- a group of enthusiasts who take
+measurements about themselves regularly to improve their health, to
+find patterns in their behavior, or because they are tech geeks. But
+these data remain under-utilized both because the raw data are hard to
+obtain and there is a lack of statistical methods and software for
+processing and interpreting the data.
+
+This **report** makes use of data from a personal activity monitoring
+device. This device collects data at 5 minute intervals through out the
+day. The data consists of two months of data from an anonymous
+individual collected during the months of October and November, 2012
+and include the number of steps taken in 5 minute intervals each day.
+
+The data for this assignment can be downloaded from the course web site:
+
+* Dataset: [Activity monitoring data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip) [52K]. The zip file contains the `activity.csv` file which is  a comma-separated-value (CSV) file and there are a total of 17,568 observations in this dataset.
+
+The variables included in this dataset are:
+
+* **steps**: Number of steps taking in a 5-minute interval (missing
+    values are coded as `NA`)
+
+* **date**: The date on which the measurement was taken in YYYY-MM-DD
+    format
+
+* **interval**: Identifier for the 5-minute interval in which
+    measurement was taken
+
+Afther decompress the zip file into a suitable folder it is necesary to put the data into R environement and to process it.
+
+### Loading, visualization and preprocessing the data
+1. Load and visualization of the data (i.e. `read.csv()`)
+
+```{r}
+    activityData <- read.csv("./data/activity.csv") #read the data into a var
+    str(activityData) #show the structure of the data
+    head(activityData)  #show first rows
+    tail(activityData)  #show last rows
+```
+
+2. Process/transform the data (if necessary) into a format suitable for your analysis.
+
+For understand the day timetable it is better to transform the `interval` var into 24hours time format. this is achieve creating a function named `Hour_minute`:
+
+```{r}
+Hour_minute<- function (minutes=integer()){
+  hour<-as.character(as.integer((minutes/60)))
+  hour<-paste(ifelse(nchar(hour)>1,"","0"),hour,sep="")
+  minu<-as.character(minutes %% 60)
+  minu<-paste(ifelse(nchar(minu)>1,"","0"),minu,sep="")
+  paste(hour,":",minu,sep="") }                       #returns "h:m" format.
+activityData$time<-Hour_minute(activityData$interval)
+```
+
+In this case, the principal transformation of the data consist on delete the rows with  `NA` values, therefore a subset will is obtained and store in `activityNoNA` var:
+
+```{r}
+   activityNoNA<-activityData[!is.na(activityData$steps),]
+   str(activityNoNA)
+```
+Noticie than the new data witout NA contains **`r nrow(activityData)-nrow(activityNoNA)` rows**  less than original dataset, it represents a `r (nrow(activityData)-nrow(activityNoNA))/nrow(activityData)*100` % of the data; it would be interesting to know if the **NA have a pattern** of distribution over the time along the **61 days**. 
 
 
+Other data transformation will be applied in every stage of data analysis.
 
-## What is mean total number of steps taken per day?
+### What is mean total number of steps taken per day?
+1. Graphis representing the number of steps by day: histograms and plots.
+
+```{r fig.width=10}
+activitySumDay<-tapply(activityNoNA$steps,activityNoNA$date,sum) # Although No NA is applied however the var date is a factor which preserve all the original factors of the structure.
+activitySumDay<-activitySumDay[!is.na(activitySumDay)]   # eliminates the  NA because there are some complete days with NA.
+par(mfrow=c(1,2)) 
+hist(activitySumDay,main="Histogram for default breaks")
+hist(activitySumDay,breaks=8, main="Total Steps by Day: Histogram for breaks=8")
+
+```
+```{r fig.width=6} 
+par(mfrow=c(1,1)) 
+days<-as.Date(names(activitySumDay)) # Get the x axis labes since the 
+plot(days,activitySumDay, main = "Sum of Steps by Days")   # Plot  the sum of steps by day
+```
+
+2. Calculate and report the **mean** and **median** and others, for the total number of steps taken per day
+Using the previous defined var `activitySumDay` store the results of mean() and fivenum() functions into a vars to show afther the results in a *table format*.
+```{r}
+fiveNames <- names(fivenum(activitySumDay)) # Get the date when the significant value occurs
+fiveVal<-format(unname(fivenum(activitySumDay)),digits=5)  # Get the five significant numbers
+meanActivity<-round(mean(activitySumDay),2)
+```
+Parameters | minimun | 25% quantile | median | mean |75% quantile |maximun
+-----------|--------|----------|--------|------|------------|-------
+value|`r fiveVal[1]` |`r fiveVal[2]` |`r fiveVal[3]` |`r meanActivity` |`r fiveVal[4]` |`r fiveVal[5]`
+Date|`r fiveNames[1]` |`r fiveNames[2]` |`r fiveNames[3]` |Non Aplied |`r fiveNames[4]` |`r fiveNames[5]`
+
+Notice than in the table above the mean value **`r format(meanActivity, digist=7)`**   does not applied  format function as this: ` format(meanActivity, digist=7)`
+
+### What is the average daily activity pattern?
+
+1. Make a time series plot (i.e. `type = "l"`) of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+```{r fig.width=10, fig.height=12}
+library(ggplot2)
+(p<-ggplot(data = activityNoNA, aes(x = interval, y = steps, colour =date)) +       
+  geom_line() + geom_point())
+
+```
+In this case instead of the of standard plot the ggplot2 is used. the parameter `fig.height=15` is adjusted to allow see all days in the legend right side. No conversions in hours:minutes is done.
+The next figure show x scale converted in time units.
+
+```{r fig.width=10, fig.height=8}
+(p<-ggplot(data = activityNoNA, aes(x =interval, y = steps, colour =date)) +       
+  geom_line() + geom_point()+ guides(col = guide_legend(ncol = 2)))
+```
+2. Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+
+For this case a similar treatment as days average can be done. 
+```{r}
+activityAverageTime<-tapply(activityNoNA$steps,activityNoNA$interval,mean)
+intervals<-unique(activityNoNA$interval)
+plot(intervals,activityAverageTime)
+df<-data.frame(time=intervals, activity_mean<-activityAverageTime) #to make pairs
+maximunIs<-df[activity_mean==max(activityAverageTime),] #get the pair which contain the maximun average
+hour<- Hour_minute(maximunIs$time) #transform the decimal time to format hh:mm
+```
+
+The maximun  correspond to **`r  hour` hours**  hours with an average of  **`r  round(max(activityAverageTime),1)`  steps.** 
+
+### Imputing missing values
+
+Note that there are a number of days/intervals where there are missing
+values (coded as `NA`). The presence of missing days may introduce
+bias into some calculations or summaries of the data.
+
+1. Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with `NA`s)
+
+See above, a new data without NA contains **`r nrow(activityData)-nrow(activityNoNA)` rows**  less than original dataset. As one day corresponds 288 measures then are a total of `r (nrow(activityData)-nrow(activityNoNA))/288` days.
+
+2. Devise a strategy for filling in all of the missing values in the dataset. The strategy does not need to be sophisticated. For example, you could use the mean/median for that day, or the mean for that 5-minute interval, etc.
+The missing values elimination can be ne next strategy:
+* When a  complete day is recorded with NA, the day is deleted
+```{r}
+############# THE activityNoNA var (see Question 1 Histogram ) contains the data
+activitySumDay<-tapply(activityNoNA$steps,activityNoNA$date,sum)
+dayNA<-activitySumDay[is.na(activitySumDay)]
+names(dayNA) #Show the days with no lectures, the 288 intervals contains NA
+daysNA<-names(dayNA)
+weekdays(as.Date(daysNA)) #  empty week days, with NA
+```
 
 
+* A NA into a day is replace by the average of the 5 previous plus the 5 post data.
 
-## What is the average daily activity pattern?
+```{r}
+activityNoNa2<-activityData[!activityData$date %in% daysNA,c(1,2,3)] #eliminates the data for complete days with NA. The col 4 time is not include since is not plicable the format for graphics.
+nrow(activityNoNa2) 
+```
+
+The number of rows in the new set is the same as if we eliminates the rows with NA in steps var then  this new set no contains any day with an interval filled with NA.
 
 
+3. Create a new dataset that is equal to the original dataset but with the missing data filled in.
+```{r}
+dput(activityNoNa2, file = "activity_no_NA_R.txt",
+     control = c("keepNA", "keepInteger", "showAttributes"))
+actity_new_data<-dget("activity_no_NA_R.txt") #maintains the same structure
+str(actity_new_data)
 
-## Imputing missing values
+write.table(activityNoNa2, file = "activity_no_NA_Text.txt", row.names = FALSE,sep = "\t")
+NewData<-read.table(file = "activity_no_NA_Text.txt", sep = "\t")
+str(NewData) #the firs row contains the name of vars it should be specified: col.names = FALSE
+
+write.csv(activityNoNa2, file = "activity_no_NA.csv",row.names = FALSE)
+NewData2<-read.csv(file = "activity_no_NA.csv")
+str(NewData2) #mantains the name of vars.
+```
+
+The option using `write.csv` is the ideal you can get the output [activity_no_NA.csv file](activity_no_NA.csv) . 
+
+4. Make a histogram of the total number of steps taken each day and Calculate and report the **mean** and **median** total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?
+
+In this case the resuls are the same because no imputing is used, deleting data with NA is a better option since the number of NA to be imputing is high.
+
+### Are there differences in activity patterns between weekdays and weekends?
+
+For this part the `weekdays()` function may be of some help here. Use
+the dataset with the filled-in missing values for this part.
+
+1. Create a new factor variable in the dataset with two levels -- "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.
+
+The code to obtain the new col named `weekday_weekend`is this:
+```{r}
+NewData2$weekday<-weekdays(as.Date(NewData2$date))
+weekend<-weekdays(as.Date(c("2012-10-06","2012-10-07"))) #these days are the two weekend days (independent of language used by the system: Saturday, Samedi, Sábado...)
+NewData2$weekday_weekend<-ifelse(NewData2$weekday %in% weekend,"weekend","weekday")
+NewData2$weekday_weekend<-as.factor(NewData2$weekday_weekend)
+
+```
 
 
+1. Make a panel plot containing a time series plot (i.e. `type = "l"`) of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). The plot should look something like the following, which was created using **simulated data**:
+```{r}
+activityweekday<-tapply(NewData2$steps,list(NewData2$interval,NewData2$weekday_weekend),mean)
+activityweekday<-as.data.frame(as.table(activityweekday))
 
-## Are there differences in activity patterns between weekdays and weekends?
+names(activityweekday)<-c("Interval","Weekday","steps")
+activityweekday$Interval<-as.integer(levels(activityweekday$Interval))
+
+(p<-ggplot(data = activityweekday, aes(x = Interval, y = steps, colour =Weekday)) +       
+   geom_line() + geom_point())
+```
